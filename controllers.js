@@ -53,8 +53,8 @@ async function getUser(req, res){
         res.json(response.data);
     }
     catch(err){
-        console.log(error);
-        res.send(error);        
+        console.log(err);
+        res.send(err);        
     }
 }
 
@@ -71,6 +71,24 @@ async function getMails(req, res) {
         res.send(error);
     }
 }
+
+async function getMailsDate(req, res) {
+    
+    try {
+        const date = req.params.date;
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const url = `https://gmail.googleapis.com/gmail/v1/users/${req.params.email}/threads?maxResults=100&q=after:${date} before:${nextDay.toISOString().split('T')[0]}`;
+        const { token } = await oAuth2Client.getAccessToken();
+        const config = createConfig(url, token);
+        const response = await axios(config);
+        res.json(response.data);
+    } catch(error) {
+        console.log(error);
+        res.send(error);
+    }
+}
+
 
 async function getDrafts(req, res) {
     try{
@@ -105,6 +123,7 @@ async function readMail(req, res) {
 module.exports = {
     getUser,
     getMails,
+    getMailsDate,
     getDrafts,
     readMail,
     sendMail

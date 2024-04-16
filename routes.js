@@ -7,5 +7,7 @@ router.get('/mail/send', controllers.sendMail);
 router.get('/mail/read/:email/:messageId', controllers.readMail);
 router.get('/mail/drafts/:email', controllers.getDrafts);
 router.get('/mail/list/:email', controllers.getMails);
+router.get('/mail/list/:email/:date', controllers.getMailsDate);
+
 
 module.exports = router;
