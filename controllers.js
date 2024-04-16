@@ -3,6 +3,7 @@ const { createConfig } = require('./utils');
 const nodemailer = require('nodemailer');
 const CONSTANTS = require('./constrant.js');
 const { google } = require('googleapis');
+const { filterOnlyKPLUSmail, convertMailToJSON } = require('./kplus.js');
 
 require('dotenv').config();
 
@@ -13,50 +14,6 @@ const oAuth2Client = new google.auth.OAuth2(
 );
 
 oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
-
-async function sendMail(req, res) {
-    try{
-        const accessToken = await oAuth2Client.getAccessToken();
-        let token = await accessToken.token;
-
-        const transport = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                ...CONSTANTS.auth,
-                accessToken: token,
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
-        });
-
-        const mailOptions = {
-            ...CONSTANTS.mailOptions,
-            text: 'This is a test mail using Gmail API'
-        };
-
-        const result = await transport.sendMail(mailOptions);
-        res.send(result);
-    }
-    catch(error){
-        console.log(error);
-        res.send(error);
-    }
-}
-
-async function getUser(req, res){
-    try{
-        const url = `https://gmail.googleapis.com/gmail/v1/users/${req.params.email}/profile`;
-        const { token } = await oAuth2Client.getAccessToken();
-        const config = createConfig(url, token);
-        const response = await axios(config);
-        res.json(response.data);
-    }
-    catch(err){
-        console.log(err);
-        res.send(err);        
-    }
-}
 
 async function getMails(req, res) {
     try{
@@ -89,20 +46,45 @@ async function getMailsDate(req, res) {
     }
 }
 
-
-async function getDrafts(req, res) {
-    try{
-        const url = `https://gmail.googleapis.com/gmail/v1/users/${req.params.email}/drafts`;
+async function getMailsDateKPLUS(req, res) {
+    try {
+        const date = req.params.date;
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const url = `https://gmail.googleapis.com/gmail/v1/users/${req.params.email}/threads?maxResults=100&q=after:${date} before:${nextDay.toISOString().split('T')[0]}`;
         const { token } = await oAuth2Client.getAccessToken();
         const config = createConfig(url, token);
         const response = await axios(config);
-        res.json(response.data);
-    }
-    catch(error){
+        const filteredData = await filterOnlyKPLUSmail(response.data);
+        
+        const ids = filteredData.map(email => email.id);
+        const fetchedEmails = [];
+        for (const id of ids) {
+            const email = await readMailById(req.params.email, id, token); // Using readMail function
+            const emailJSON = await convertMailToJSON(email); // Convert email to JSON
+            fetchedEmails.push(emailJSON);
+        }
+        console.log(fetchedEmails);
+        res.json(fetchedEmails);
+    } catch(error) {
         console.log(error);
         res.send(error);
     }
 }
+
+async function readMailById(email, messageId, token) {
+    try {
+        const url = `https://gmail.googleapis.com/gmail/v1/users/${email}/messages/${messageId}`;
+        const config = createConfig(url, token);
+        const response = await axios(config);
+        const decodedData = Buffer.from(response.data.payload.body.data, 'base64').toString('utf-8');
+        return decodedData;
+    } catch(error) {
+        console.log(error);
+        return null;
+    }
+}
+
 
 async function readMail(req, res) {
     try{
@@ -110,7 +92,8 @@ async function readMail(req, res) {
         const { token } = await oAuth2Client.getAccessToken();
         const config = createConfig(url, token);
         const response = await axios(config);
-        
+        const decodedData = Buffer.from(response.data.payload.body.data, 'base64').toString('utf-8');
+        console.log(decodedData);
         let data = await response.data;
         res.json(data);
     }
@@ -121,10 +104,8 @@ async function readMail(req, res) {
 }
 
 module.exports = {
-    getUser,
     getMails,
     getMailsDate,
-    getDrafts,
+    getMailsDateKPLUS,
     readMail,
-    sendMail
 };
